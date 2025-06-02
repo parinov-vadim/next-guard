@@ -1,5 +1,5 @@
 import { RouterContext } from "next/dist/shared/lib/router-context.shared-runtime";
-import { useContext } from "react";
+import { useContext, useRef,useEffect } from "react";
 import { GuardDef, RenderedState } from "../types";
 import { DEBUG } from "../utils/debug";
 import {
@@ -7,7 +7,10 @@ import {
   setupHistoryAugmentationOnce,
 } from "../utils/historyAugmentation";
 import { useIsomorphicLayoutEffect } from "./useIsomorphicLayoutEffect";
-
+import {
+  AppRouterContext,
+  AppRouterInstance
+} from "next/dist/shared/lib/app-router-context.shared-runtime";
 // Based on https://github.com/vercel/next.js/discussions/47020#discussioncomment-7826121
 
 const renderedStateRef: { current: RenderedState } = {
@@ -16,18 +19,27 @@ const renderedStateRef: { current: RenderedState } = {
 
 export function useInterceptPopState({
   guardMapRef,
+  acceptedUrl
 }: {
   guardMapRef: React.MutableRefObject<Map<string, GuardDef>>;
+  acceptedUrl?: string | null;
 }) {
   const pagesRouter = useContext(RouterContext);
+  const origRouter = useContext(AppRouterContext);
+
+  const acceptedUrlRef = useRef(acceptedUrl);
+
+  // Обновляем реф при изменении значения
+  useEffect(() => {
+    acceptedUrlRef.current = acceptedUrl;
+  }, [acceptedUrl]);
 
   useIsomorphicLayoutEffect(() => {
     // NOTE: Called before Next.js router setup which is useEffect().
     // https://github.com/vercel/next.js/blob/50b9966ba9377fd07a27e3f80aecd131fa346482/packages/next/src/client/components/app-router.tsx#L518
     const { writeState } = setupHistoryAugmentationOnce({ renderedStateRef });
 
-    const handlePopState = createHandlePopState(guardMapRef, writeState);
-
+    const handlePopState = createHandlePopState(guardMapRef, writeState, acceptedUrlRef,origRouter);
     if (pagesRouter) {
       pagesRouter.beforePopState(() => handlePopState(history.state));
 
@@ -50,12 +62,14 @@ export function useInterceptPopState({
         window.removeEventListener("popstate", onPopState);
       };
     }
-  }, [pagesRouter]);
+  }, [pagesRouter,origRouter]);
 }
 
 function createHandlePopState(
   guardMapRef: React.MutableRefObject<Map<string, GuardDef>>,
-  writeState: () => void
+  writeState: () => void,
+  acceptedUrlRef: React.RefObject<string | null | undefined>,
+  router: AppRouterInstance | null
 ) {
   let dispatchedState: unknown;
 
@@ -112,6 +126,7 @@ function createHandlePopState(
     // Wait for all callbacks to be resolved
     (async () => {
       let i = -1;
+      let shouldUseAcceptedUrl = false;
 
       for (const def of defs) {
         i++;
@@ -139,6 +154,9 @@ function createHandlePopState(
           }
           return;
         }
+        if (acceptedUrlRef.current !== undefined) {
+          shouldUseAcceptedUrl = true;
+        }
       }
 
       if (DEBUG) {
@@ -146,6 +164,31 @@ function createHandlePopState(
           `useInterceptPopState(): Accept popstate event, ${nextIndex}`
         );
       }
+     const currentAcceptedUrl = acceptedUrlRef.current;
+    if (currentAcceptedUrl && shouldUseAcceptedUrl) {
+  if (DEBUG) {
+    console.log(`useInterceptPopState(): Redirecting to acceptedUrl: ${currentAcceptedUrl}`);
+  }
+  
+  try {
+    // 1. Сначала изменяем URL в истории браузера без перезагрузки страницы
+    const urlObj = new URL(currentAcceptedUrl, window.location.origin);
+    const isExternalUrl = urlObj.origin !== window.location.origin;
+    
+    if (isExternalUrl) {
+      // Для внешних URL придется использовать window.location
+      window.location.replace(currentAcceptedUrl);
+    } else {
+        renderedStateRef.current.index = nextIndex;
+        router?.replace(currentAcceptedUrl)
+    }
+  } catch (e) {
+    console.error('Navigation failed:', e);
+    // Резервный вариант
+    window.location.replace(currentAcceptedUrl);
+  }
+  return; // Останавливаем дальнейшую обработку
+}
       // accept
       dispatchedState = nextState;
       window.dispatchEvent(new PopStateEvent("popstate", { state: nextState }));

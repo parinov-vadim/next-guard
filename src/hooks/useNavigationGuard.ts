@@ -1,5 +1,8 @@
 import { useCallback, useContext, useId, useState } from "react";
-import { NavigationGuardProviderContext } from "../components/NavigationGuardProviderContext";
+import {
+  NavigationAcceptedUrlContext,
+  NavigationGuardProviderContext
+} from "../components/NavigationGuardProviderContext";
 import { NavigationGuardCallback, NavigationGuardOptions } from "../types";
 import { useIsomorphicLayoutEffect } from "./useIsomorphicLayoutEffect";
 
@@ -7,6 +10,8 @@ import { useIsomorphicLayoutEffect } from "./useIsomorphicLayoutEffect";
 export function useNavigationGuard(options: NavigationGuardOptions) {
   const callbackId = useId();
   const guardMapRef = useContext(NavigationGuardProviderContext);
+  const acceptContext = useContext(NavigationAcceptedUrlContext);
+
   if (!guardMapRef)
     throw new Error(
       "useNavigationGuard must be used within a NavigationGuardProvider"
@@ -33,11 +38,18 @@ export function useNavigationGuard(options: NavigationGuardOptions) {
       enabled: typeof enabled === "function" ? enabled : () => enabled ?? true,
       callback,
     });
+    if (acceptContext && options.acceptedUrl) {
+      acceptContext.setAcceptedUrl(options.acceptedUrl as string);
+    }
+
 
     return () => {
       guardMapRef.current.delete(callbackId);
+      if (acceptContext) {
+        acceptContext.setAcceptedUrl(null);
+      }
     };
-  }, [options.confirm, options.enabled]);
+  }, [options.confirm, options.enabled, options.acceptedUrl]);
 
   const active = pendingState !== null;
 

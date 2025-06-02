@@ -6,7 +6,7 @@ import { useInterceptPopState } from "../hooks/useInterceptPopState";
 import { GuardDef } from "../types";
 import { InterceptAppRouterProvider } from "./InterceptAppRouterProvider";
 import { InterceptPagesRouterProvider } from "./InterceptPagesRouterProvider";
-import { NavigationGuardProviderContext } from "./NavigationGuardProviderContext";
+import { NavigationAcceptedUrlContext, NavigationGuardProviderContext } from "./NavigationGuardProviderContext";
 
 export function NavigationGuardProvider({
   children,
@@ -14,17 +14,21 @@ export function NavigationGuardProvider({
   children: React.ReactNode;
 }) {
   const guardMapRef = useRef(new Map<string, GuardDef>());
+    const [acceptedUrl, setAcceptedUrl] = React.useState<string | null>(null);
+  
 
-  useInterceptPopState({ guardMapRef });
+  useInterceptPopState({ guardMapRef, acceptedUrl });
   useInterceptPageUnload({ guardMapRef });
 
   return (
     <NavigationGuardProviderContext.Provider value={guardMapRef}>
-      <InterceptAppRouterProvider guardMapRef={guardMapRef}>
-        <InterceptPagesRouterProvider guardMapRef={guardMapRef}>
-          {children}
-        </InterceptPagesRouterProvider>
-      </InterceptAppRouterProvider>
+     <NavigationAcceptedUrlContext.Provider value={{ acceptedUrl, setAcceptedUrl }}>
+       <InterceptAppRouterProvider guardMapRef={guardMapRef}>
+         <InterceptPagesRouterProvider guardMapRef={guardMapRef}>
+           {children}
+         </InterceptPagesRouterProvider>
+       </InterceptAppRouterProvider>
+     </NavigationAcceptedUrlContext.Provider>
     </NavigationGuardProviderContext.Provider>
   );
 }

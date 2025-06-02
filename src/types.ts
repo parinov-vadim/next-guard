@@ -2,6 +2,9 @@ export interface NavigationGuardOptions {
   /** @default true */
   enabled?: boolean | ((params: NavigationGuardParams) => boolean);
   confirm?: NavigationGuardCallback;
+  onAccept?:() => void
+  allowedUrls?: string[];
+  acceptedUrl?: string | null;
 }
 
 export interface NavigationGuardParams {
@@ -21,6 +24,9 @@ export type NavigationGuardCallback = (
 export interface GuardDef {
   enabled: (params: NavigationGuardParams) => boolean;
   callback: NavigationGuardCallback;
+  onAccept?:() => void;
+  allowedUrls?: string[];
+  acceptedUrl?: string | null;
 }
 
 export interface RenderedState {
